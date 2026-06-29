@@ -1,2 +1,21 @@
+# Editors / history
 .history
 .idea
+
+# KiCad per-user + generated
+*.kicad_prl
+fp-info-cache
+*-backups/
+.mcp-backups/
+*.bak
+*~
+*.lck
+~*.lck
+
+# Freerouting / EDA intermediates
+*.dsn
+*.ses
+*_best.ses
+
+# Generated reports (regenerable)
+*_drc_violations.json
