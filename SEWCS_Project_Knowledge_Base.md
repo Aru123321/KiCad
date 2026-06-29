@@ -1,7 +1,7 @@
 # SEWCS — NIR Recyclability Sensor · Project Knowledge Base
 
 > Living design document. Update this as decisions change so any future session (or teammate) has full context.
-> **Last updated:** 2026-06-28
+> **Last updated:** 2026-06-29
 
 ---
 
@@ -166,6 +166,8 @@ OPA380 TIA: photodiode current → voltage; feedback R + small C; biased at mid-
 - **2026-06-28** — Parts chosen for **JLCPCB assembly** so the fab quote reflects a fully-built board.
 - **2026-06-28** — NIR optics **not fab-assemblable** → off-board connectorized optical head; main board fab-assembled.
 - **2026-06-28** — Keep dedicated **ADS1115** (16-bit) rather than ESP32's noisy internal ADC, for signal quality.
+- **2026-06-29** — **Optics belong on a SEPARATE optical head, not the main board.** Main board should expose a ~10-pin connector (4 LED drives + shared anode, photodiode ±, GND) instead of carrying the optic footprints. See §9.
+- **2026-06-29** — **Freeze `v1` as the cost-estimate milestone.** Next board revision = a *new* `v1.1` file (don't edit v1 in place). Hold v1.1 until after bench validation so all informed changes batch into one revision.
 
 ## 7. Open questions / TODO
 - Confirm USB-C connector part + whether USB-C is power-only or power+data (programming).
@@ -187,6 +189,45 @@ The commercial board `SEWCS_Commercial_v1` is **schematic-complete, placed, rout
 
 > Note: layout is functional but **loose** (115×80 mm). A compact re-place could shrink it well under
 > 100×100 mm for a cheaper bare-board tier — a worthwhile optimization before production.
+
+## 9. Optics architecture & roadmap (decided 2026-06-29)
+
+### Decision: optics go on a separate optical head, not the main PCB
+The reflectance-probe geometry — photodiode centred, LEDs ringed around it and tilted inward,
+a **baffle wall** blocking direct LED→detector glare, and an **ambient-light hood** — is
+fundamentally **mechanical/3D, not a flat-PCB problem**. Conclusions:
+- The main electronics board should carry a **single connector** (~10 pins: 4 LED drives +
+  shared LED anode rail, photodiode anode/cathode, GND) — **not** the optic footprints.
+- The optics mount on a small dedicated **optical head** (tiny PCB or 3D-printed carrier) with
+  the baffle + hood, cabled back to the main board.
+
+**Why:** (1) the geometry is mechanical and best iterated as a 3D-printed head; (2) a bin-rim
+sensor wants the electronics sealed in an enclosure while only the head faces the (wet, dirty)
+bin throat — the standard sensor-head/controller split; (3) the head can be respun cheaply
+without touching the ~$9 electronics board; (4) it's cleaner than the current board.
+
+### Current-state caveat (important)
+`SEWCS_Commercial_v1` currently has the **5 optic footprints scattered as loose pads** across the
+board. That was a stopgap: the intended photodiode-centred ring caused a real DRC **short**
+(an LED cathode bridging GND) plus courtyard overlaps because the placeholder footprints
+overlapped, so they were spread out to get a clean route. The result is **neither a ring nor a
+connector** — it routes and quotes fine, but it is **not** the production shape. Production shape
+= replace those 5 footprints with the head connector (per the decision above).
+
+### Roadmap & sequencing (do NOT respin the PCB next)
+1. **Freeze `v1`** as the cost-estimate artifact (committed). Don't edit in place.
+2. **Validate on the breadboard first** (Pi + Thorlabs parts): wire the front-end, then collect
+   spectral data on target materials. This determines **which wavelengths actually separate the
+   materials**, plus the real **spacing / working distance / baffle** geometry. *Everything
+   downstream depends on these numbers.* (Linear PRA-12, PRA-14.)
+3. **Then create `v1.1` once**, batching all bench-informed changes together: optics→connector,
+   compact re-layout (shrink < 100×100 mm for a cheaper JLCPCB tier), final wavelength set, and
+   any commercial-part swaps. One clean revision beats 2–3 incremental respins.
+4. **Design the optical head** (small PCB + 3D-printed baffle/hood) around the validated geometry.
+
+> Rationale for *not* doing v1.1 now: the concept isn't bench-validated yet, and several changes
+> (which wavelengths to keep, head pinout) are gated on data we don't have. Polishing the board
+> before the breadboard proves material separation is premature. Validate → batch → respin once.
 
 ### Older status log (2026-06-28, ~1:30pm)
 - [x] Design tracks defined; commercial architecture set.
