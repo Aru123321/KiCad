@@ -1,7 +1,7 @@
 # SEWCS — NIR Recyclability Sensor · Project Knowledge Base
 
 > Living design document. Update this as decisions change so any future session (or teammate) has full context.
-> **Last updated:** 2026-06-29
+> **Last updated:** 2026-07-06
 
 ---
 
@@ -88,11 +88,15 @@ Checked JLCPCB's live catalog (616,593 parts, 2026-06-28):
 
 Standalone, USB-C powered, ESP32-based. 2-layer, SMD, JLCPCB PCBA.
 
+> This diagram is the **target architecture**. Lines marked ⚠ deviate in the v1 as-built
+> schematic — fixes are batched in the §9 v1.1 list.
+
 ```
 USB-C (5V) ──► AMS1117-3.3 LDO ──► 3V3 (digital)
-                         └─(ferrite)─► 3V3A (clean analog rail)
+                         └─(ferrite)─► 3V3A (clean analog rail)   ⚠ not in v1 — v1.1 item 2
 USB D+/D- ──► CH340C USB-UART ──► ESP32 TXD0/RXD0
-                         └─ auto-reset (2× transistor) ──► EN / IO0
+                         └─ auto-reset: omitted in v1 (manual BOOT+RESET flashing)
+                         └─ USB ESD diode                          ⚠ not in v1 — v1.1 item 3
 
 ESP32-WROOM-32E
    ├─ GPIO ×4 ──► gate R ──► 2N7002 ──► [LED+ header]   (4 NIR LED driver channels)
@@ -103,21 +107,23 @@ Optical head connector (off-board):
    ├─ 4× LED drive returns (+ shared anode to 3V3/5V)
    └─ photodiode anode/cathode ──► OPA380 TIA ──► ADS1115 AIN0
 
-OPA380 TIA: photodiode current → voltage; feedback R + small C; biased at mid-rail for single-supply.
+OPA380 TIA: photodiode current → voltage; feedback R + small C; biased at mid-rail,
+SINGLE +3V3 supply.  ⚠ v1 wrongly wired ±3V3 via ICL7660 (exceeds 6 V abs max) — v1.1 item 1
 ```
 
-### Commercial BOM (assemblable — JLCPCB part numbers)
+### Commercial BOM (as-built v1 fab BOM — `fab/SEWCS_Commercial_v1-BOM-JLCPCB.csv` is canonical)
 
 | Block | Part | JLCPCB | Pkg | ~$/ea |
 |-------|------|--------|-----|-------|
 | MCU | ESP32-WROOM-32E module (ESP32-32E-N4) | C19949066 | SMD module | 2.90 |
 | TIA | OPA380AIDGKR | C2057355 | VSSOP-8 | 2.83 |
-| ADC | ADS1115IRUGR | C2651328 | X2QFN-10 | 1.78 |
+| ADC | ADS1115IDGSR | C2868291 | MSOP-10 | 1.78 |
 | USB-UART | CH340C | C84681 | SOP-16 | 0.53 |
 | LED driver ×4 | 2N7002 | C16338 | SOT-23 | 0.03 |
 | LDO | AMS1117-3.3 | C18906017 | SOT-223 | 0.03 |
-| USB-C | (16-pin Type-C receptacle — TBD) | TBD | SMD | ~0.10 |
-| Passives | R/C 0402–0805, I²C pull-ups, decoupling | various | SMD | — |
+| USB-C | TYPE-C-31-M-12 (16-pin receptacle) | C165948 | SMD | ~0.10 |
+| Charge pump | ICL7660 (⚠ delete in v1.1 — item 1) | C7881 | SOIC-8 | 0.30 |
+| Passives | R/C 0805, I²C pull-ups, decoupling (⚠ C1 2.2pF has no LCSC part — v1.1 item 4) | various | SMD | — |
 
 > **Off-board (NOT on PCBA):** 4× NIR LEDs, 1× InGaAs/Ge photodiode → mount on optical head, wire to header.
 
@@ -168,13 +174,13 @@ OPA380 TIA: photodiode current → voltage; feedback R + small C; biased at mid-
 - **2026-06-28** — Keep dedicated **ADS1115** (16-bit) rather than ESP32's noisy internal ADC, for signal quality.
 - **2026-06-29** — **Optics belong on a SEPARATE optical head, not the main board.** Main board should expose a ~10-pin connector (4 LED drives + shared anode, photodiode ±, GND) instead of carrying the optic footprints. See §9.
 - **2026-06-29** — **Freeze `v1` as the cost-estimate milestone.** Next board revision = a *new* `v1.1` file (don't edit v1 in place). Hold v1.1 until after bench validation so all informed changes batch into one revision.
+- **2026-07-06** — Design review found a real bug in v1: **OPA380 wired to ±3V3 (6.6 V) exceeds its 6 V abs max**. Fix batched into v1.1 (single-supply TIA, drop ICL7660). See §9 v1.1 batch list.
+- **2026-07-06** — Doc cleanup: §5 relabeled target-vs-as-built with ⚠ markers; BOM table synced to actual fab BOM; §7 collapsed into §9; stale wiring resume notes pruned (in git history); tooling gotchas moved to §8a; added v1.1 sign-off checklist.
 
 ## 7. Open questions / TODO
-- Confirm USB-C connector part + whether USB-C is power-only or power+data (programming).
-- Confirm LED drive rail (3V3 vs 5V) — depends on chosen commercial NIR LED forward voltages.
-- Pick optical-head connector pinout (≥ 4 LED drives + PD ±, plus power/GND).
-- Decide ADC reference / TIA mid-rail bias scheme.
-- After prototype: feature-select wavelengths → finalize production LED set.
+
+All open items now live in the **§9 v1.1 batch list** (electrical fixes + bench-gated decisions).
+Resolved since first draft: USB-C part chosen (C165948, power+data via CH340C).
 
 ## 8. Status — COMMERCIAL BOARD COMPLETE (updated 2026-06-29)
 
@@ -189,6 +195,15 @@ The commercial board `SEWCS_Commercial_v1` is **schematic-complete, placed, rout
 
 > Note: layout is functional but **loose** (115×80 mm). A compact re-place could shrink it well under
 > 100×100 mm for a cheaper bare-board tier — a worthwhile optimization before production.
+
+## 8a. MCP tooling gotchas (keep — still apply to future sessions)
+
+- `batch_add_components` IGNORES x/y → parts land at (0,0); fix with `move_schematic_component`
+  (takes `position:{x,y}`).
+- `connect_to_net` has a stale index for batch-added parts → use
+  `add_schematic_net_label` with `componentRef`+`pinNumber`+`netName` (snaps to pin, reliable).
+- `connect_to_net` + move can create spurious cross-wires; clean up via script if it recurs.
+- Freerouting 2.2.4 needs Java 21+ (OpenJDK 26 installed).
 
 ## 9. Optics architecture & roadmap (decided 2026-06-29)
 
@@ -229,46 +244,39 @@ connector** — it routes and quotes fine, but it is **not** the production shap
 > (which wavelengths to keep, head pinout) are gated on data we don't have. Polishing the board
 > before the breadboard proves material separation is premature. Validate → batch → respin once.
 
-### Older status log (2026-06-28, ~1:30pm)
-- [x] Design tracks defined; commercial architecture set.
-- [x] JLCPCB parts feasibility checked.
-- [x] Original `SEWCS` restored to pristine prototype; commercial work isolated in `SEWCS_Commercial_v1`.
-- [x] **Commercial schematic — COMPLETE & ERC-CLEAN (0 errors).** All sections wired & verified.
-- [ ] PCB layout + routing — **next**.
-- [ ] Export Gerbers/BOM/CPL for fab cost quote.
+### v1.1 batch list (accumulate here; do NOT edit v1)
+
+**Electrical fixes (design review, 2026-07-06):**
+1. **TIA supply bug — OPA380 on ±3V3 violates abs max.** Schematic powers U1 from +3V3/−3V3
+   (6.6 V total); OPA380 is rated 2.7–5.5 V operating, 6 V abs max, and is a single-supply part.
+   Fix: delete U6 (ICL7660), C8, C9; run TIA on single +3V3 with mid-rail bias (per §5 intent).
+   Also protects ADS1115 (inputs must stay ≥ GND−0.3 V; a negative TIA swing could damage it)
+   and removes charge-pump ripple from the most sensitive node.
+2. **Add the planned analog rail.** §5 calls for ferrite → 3V3A; not present in schematic.
+   Add ferrite bead + local decoupling; put TIA + ADS1115 on 3V3A, away from ESP32 WiFi bursts.
+3. **Add USB ESD protection.** Costed in BOM estimate but absent. USBLC6-2SC6 on D+/D−/VBUS.
+4. **C1 (2.2 pF TIA feedback) has no LCSC part** in the JLCPCB BOM → would arrive unpopulated
+   and the TIA will oscillate without it. Assign a part (e.g. 0805/0603 C0G 2.2 pF).
+
+**Already planned (from §9):** optics footprints → head connector; compact re-place < 100×100 mm;
+final wavelength set from bench data; commercial part swaps.
+
+**Bench-gated (decide from prototype data):** LED drive rail 3V3 vs 5V; head connector pinout;
+TIA feedback R/C values for the real photodiode; ADC reference / bias scheme.
+
+### v1.1 sign-off checklist (run before export; items 1 & 4 above would have been caught here)
+
+- [ ] Every IC's supply pins checked against datasheet operating range AND absolute max.
+- [ ] Every analog input's voltage range checked against its ADC/amp input limits (incl. transients).
+- [ ] Every fab BOM line has an LCSC part number; no blanks.
+- [ ] Each LCSC part's package matches the footprint on the board (pull the LCSC datasheet).
+- [ ] Schematic matches §5 architecture diagram, or the diagram is updated to match.
+- [ ] ERC 0 errors → DRC 0 errors → Gerber/BOM/CPL re-export → this doc updated.
 
 > ERC note: 0 errors. ~200 remaining warnings are cosmetic only (symbol-vs-library cache
 > mismatch, off-grid pins from mm placement, NC-flag notices) and do not affect the netlist
-> or fab. A tooling quirk (connect_to_net + move created spurious cross-wires) was cleaned up
-> via script; net connectivity is by pin-snapped labels.
+> or fab. Net connectivity is by pin-snapped labels.
 
-### Resume notes — where wiring left off
-Work file: `SEWCS_Commercial_v1.kicad_sch`. Reused analog/LED/ADC block keeps its prototype
-net labels (GPIO17/27/22/23 for LED gates, I2C_SDA/SCL, PD_SIG→TIA_OUT, +3V3/-3V3/GND).
-New blocks added: U3 ESP32-WROOM-32E, U4 CH340C, J3 USB-C, U5 AMS1117-3.3, U6 ICL7660 (−3V3
-charge pump), plus C5–C15, R12–R16, SW1/SW2, D6.
-
-**Done wiring:** J3 (USB-C: VBUS→+5V, GND, CC1/CC2 via R14/R15, D±→USB_DP/DM), U5 (AMS1117
-pins), and the first snap-to-pin labels (R14/1, U6/8, U3/2).
-
-**Tooling gotchas for next session:**
-- `batch_add_components` IGNORES x/y → parts land at (0,0); fix with `move_schematic_component`
-  (takes `position:{x,y}`).
-- `connect_to_net` has a stale index for batch-added parts → use
-  `add_schematic_net_label` with `componentRef`+`pinNumber`+`netName` (snaps to pin, reliable).
-
-**Remaining wiring (net = pin):**
-- U6 ICL7660: 3→GND, 5→-3V3, 6→GND(LV), 2→CP_PLUS, 4→CP_MINUS; C8 1→CP_PLUS/2→CP_MINUS;
-  C9 1→-3V3/2→GND.
-- AMS caps: C5 1→+5V/2→GND; C6,C7 1→+3V3/2→GND.
-- USB-C CC: R14 2→GND; R15 1→CC2/2→GND. Power LED: R16 1→+3V3/2→PWR_LED; D6 2→PWR_LED/1→GND.
-- ESP32 U3: 1→GND, 3→EN, 25→IO0, 35→ESP_TX, 34→ESP_RX, 28→GPIO17, 12→GPIO27, 36→GPIO22,
-  37→GPIO23, 33→I2C_SDA, 31→I2C_SCL. Decoupling C10/C11/C12 1→+3V3/2→GND.
-  EN: R12 1→+3V3/2→EN, C13 1→EN/2→GND, SW1 1→EN/2→GND. IO0: R13 1→+3V3/2→IO0, SW2 1→IO0/2→GND.
-- CH340 U4: 16→+5V, 1→GND, 4→V3_CH340, 5→USB_DP, 6→USB_DM, 2→ESP_RX, 3→ESP_TX;
-  C14 1→V3_CH340/2→GND, C15 1→+5V/2→GND.
-- Then: ERC → sync_schematic_to_board → board outline (~50×60mm) + optics ring region →
-  place → route → DRC → export Gerbers/BOM/CPL.
-
-**Design notes / TODO to verify:** auto-reset transistors omitted (manual BOOT+RESET flashing
-for v1). NIR optics (D1–D5) are hand-mounted, not in JLCPCB PCBA. TIA uses ±3V3 (−3V3 from U6).
+> As-built notes: auto-reset transistors omitted (manual BOOT+RESET flashing for v1).
+> NIR optics (D1–D5) are on-board loose footprints marked DNP in the fab BOM (see §9 caveat).
+> Detailed wiring session notes pruned 2026-07-06 — see git history (commit `58ec262` and earlier).
